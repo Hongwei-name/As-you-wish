@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shopping.mapper.PromotionProductMapper">
+    
+    <select id="selectByPromotionId" resultType="com.shopping.entity.PromotionProduct">
+        SELECT * FROM t_promotion_product 
+        WHERE promotion_id = #{promotionId}
+    </select>
+    
+    <select id="selectByProductId" resultType="com.shopping.entity.PromotionProduct">
+        SELECT p.* FROM t_promotion_product p
+        JOIN t_promotion pr ON p.promotion_id = pr.id
+        WHERE p.product_id = #{productId}
+        AND pr.status = 1
+        AND pr.start_time &lt;= NOW()
+        AND pr.end_time &gt;= NOW()
+        AND p.stock > 0
+        LIMIT 1
+    </select>
+    
+    <update id="decreaseStock">
+        UPDATE t_promotion_product 
+        SET stock = stock - #{quantity} 
+        WHERE id = #{id} AND stock >= #{quantity}
+    </update>
+    
+</mapper>

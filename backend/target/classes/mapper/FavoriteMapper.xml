@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shopping.mapper.FavoriteMapper">
+    
+    <select id="getFavoritesByUserId" resultType="com.shopping.entity.Favorite">
+        SELECT * FROM t_favorite 
+        WHERE user_id = #{userId} 
+        ORDER BY created_at DESC
+    </select>
+    
+    <select id="checkFavorite" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM t_favorite 
+        WHERE user_id = #{userId} AND product_id = #{productId}
+    </select>
+    
+</mapper>

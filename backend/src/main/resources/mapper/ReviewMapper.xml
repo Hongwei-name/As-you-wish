@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shopping.mapper.ReviewMapper">
+    
+    <select id="getReviewsByProductId" resultType="com.shopping.entity.Review">
+        SELECT * FROM t_review 
+        WHERE product_id = #{productId} 
+        ORDER BY created_at DESC
+    </select>
+    
+    <select id="getAverageRatingByProductId" resultType="java.lang.Double">
+        SELECT AVG(rating) FROM t_review 
+        WHERE product_id = #{productId}
+    </select>
+    
+    <select id="getRatingDistributionByProductId" resultType="java.util.Map">
+        SELECT 
+            rating, 
+            COUNT(*) as count 
+        FROM t_review 
+        WHERE product_id = #{productId} 
+        GROUP BY rating 
+        ORDER BY rating DESC
+    </select>
+    
+</mapper>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shopping.mapper.BrowseHistoryMapper">
+    
+    <select id="getRecentProductIdsByUserId" resultType="java.lang.Long">
+        SELECT product_id FROM t_browse_history 
+        WHERE user_id = #{userId} 
+        ORDER BY browse_time DESC 
+        LIMIT #{limit}
+    </select>
+    
+    <select id="getLatestByUserIdAndProductId" resultType="com.shopping.entity.BrowseHistory">
+        SELECT * FROM t_browse_history 
+        WHERE user_id = #{userId} AND product_id = #{productId} 
+        ORDER BY browse_time DESC 
+        LIMIT 1
+    </select>
+    
+</mapper>

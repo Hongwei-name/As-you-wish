@@ -1,0 +1,36 @@
+{
+  "groups": [
+    {
+      "name": "jwt",
+      "type": "com.shopping.config.JwtConfig",
+      "sourceType": "com.shopping.config.JwtConfig"
+    }
+  ],
+  "properties": [
+    {
+      "name": "jwt.expiration",
+      "type": "java.lang.Long",
+      "description": "JWT 过期时间（毫秒）",
+      "sourceType": "com.shopping.config.JwtConfig"
+    },
+    {
+      "name": "jwt.header",
+      "type": "java.lang.String",
+      "description": "JWT 请求头名称",
+      "sourceType": "com.shopping.config.JwtConfig"
+    },
+    {
+      "name": "jwt.prefix",
+      "type": "java.lang.String",
+      "description": "JWT Token 前缀",
+      "sourceType": "com.shopping.config.JwtConfig"
+    },
+    {
+      "name": "jwt.secret",
+      "type": "java.lang.String",
+      "description": "JWT 密钥",
+      "sourceType": "com.shopping.config.JwtConfig"
+    }
+  ],
+  "hints": []
+}
