@@ -12,13 +12,13 @@ public class AuthUser {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 电商平台登录账号，唯一 */
+    /** 登录账号，唯一 */
     private String username;
 
-    /** BCrypt加密后的密码，不存储明文 */
+    /** 加密后的密码，不存储明文 */
     private String password;
 
-    /** 电商平台用户昵称 */
+    /** 用户昵称 */
     private String nickname;
 
     /** 用户头像地址 */

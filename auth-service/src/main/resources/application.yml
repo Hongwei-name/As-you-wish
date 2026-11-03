@@ -3,7 +3,7 @@ spring:
     name: auth-service # 服务名称，nacos注册必须要有
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://mysql6.sqlpub.com:3311/im_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    url: jdbc:mysql://mysql6.sqlpub.com:3311/im_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
     username: im_platform
     password: rwxS4bi1AOrvdyrV
   cloud:
@@ -22,4 +22,11 @@ mybatis-plus:
   type-aliases-package: com.asyouwish.auth.entity
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 开发打开，生产注释掉！打印sql
+#    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+captcha:
+  init-default-resource: true  # 使用自带背景图，省去找图麻烦
+  expire:
+    default: 60000
