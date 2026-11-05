@@ -22,7 +22,7 @@ public class SliderCaptchaUtil {
 
     /**
      * 生成滑块验证码
-     * @return Map包含: bgBase64(背景图), sliderBase64(滑块图), x(正确坐标)
+     * @return Map包含: bgBase64(背景图), sliderBase64(滑块图), x/y(滑块坐标)
      */
     public static Map<String, Object> createCaptcha() throws IOException {
         Map<String, Object> result = new HashMap<>();
@@ -71,7 +71,8 @@ public class SliderCaptchaUtil {
         // 3. 转成 Base64 方便前端展示
         result.put("bgBase64", "data:image/png;base64," + imageToBase64(bgImage));
         result.put("sliderBase64", "data:image/png;base64," + imageToBase64(sliderImage));
-        result.put("x", correctX); // 返回正确的X坐标给后端存Redis
+        result.put("x", correctX); // 返回 X 坐标给后端校验
+        result.put("y", correctY); // 返回 Y 坐标供前端展示拼图位置
 
         return result;
     }

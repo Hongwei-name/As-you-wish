@@ -1,5 +1,9 @@
 package com.asyouwish.auth.service.impl;
 
+import cloud.tianai.captcha.application.ImageCaptchaApplication;
+import cloud.tianai.captcha.common.constant.CaptchaTypeConstant;
+import cloud.tianai.captcha.common.response.ApiResponse;
+import com.asyouwish.auth.dto.CaptchaCheckDTO;
 import com.asyouwish.auth.dto.PasswordLoginDTO;
 import com.asyouwish.auth.dto.SendSmsDTO;
 import com.asyouwish.auth.dto.SmsLoginDTO;
@@ -10,7 +14,6 @@ import com.asyouwish.auth.service.UserService;
 import com.asyouwish.auth.util.BusinessException;
 import com.asyouwish.auth.util.IpUtil;
 import com.asyouwish.auth.util.JwtUtil;
-import com.asyouwish.auth.util.SliderCaptchaUtil; // 新增导入
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
@@ -20,9 +23,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 public class UserServiceImpl extends ServiceImpl<AuthUserMapper, AuthUser> implements UserService {
 
     private final StringRedisTemplate redisTemplate;
+    private final ImageCaptchaApplication captchaApplication;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
@@ -48,45 +49,35 @@ public class UserServiceImpl extends ServiceImpl<AuthUserMapper, AuthUser> imple
     }
 
     @Override
-    public Map<String, String> getSliderCaptcha() {
-        try {
-            Map<String, Object> captchaData = SliderCaptchaUtil.createCaptcha();
-            Integer correctX = (Integer) captchaData.get("x");
-            String uuid = UUID.randomUUID().toString();
-
-            redisTemplate.opsForValue().set(SLIDER_CAPTCHA_PREFIX + uuid, String.valueOf(correctX), 2, TimeUnit.MINUTES);
-
-            Map<String, String> result = new HashMap<>();
-            result.put("uuid", uuid);
-            result.put("bgBase64", (String) captchaData.get("bgBase64"));
-            result.put("sliderBase64", (String) captchaData.get("sliderBase64"));
-            return result;
-        } catch (Exception e) {
-            log.error("生成滑块验证码失败", e);
+    public ApiResponse<?> getSliderCaptcha() {
+        ApiResponse<?> response = captchaApplication.generateCaptcha(CaptchaTypeConstant.SLIDER);
+        if (!response.isSuccess()) {
             throw new BusinessException("验证码生成失败");
         }
+        return response;
     }
 
     @Override
-    public void verifySliderAndSendSms(SendSmsDTO dto) {
-        // 1. 校验滑块
-        String cacheKey = SLIDER_CAPTCHA_PREFIX + dto.getCaptchaUuid();
-        String cacheCorrectX = redisTemplate.opsForValue().get(cacheKey);
-
-        if (cacheCorrectX == null) {
-            throw new BusinessException("验证码已过期，请刷新页面重试");
+    public ApiResponse<?> verifySliderCaptcha(CaptchaCheckDTO dto) {
+        if (dto == null || !StringUtils.hasText(dto.getId()) || dto.getData() == null) {
+            throw new BusinessException("验证码参数不完整");
         }
-        // 无论成功失败，先删除，防止同一个验证码被重复使用
-        redisTemplate.delete(cacheKey);
-
-        // 允许的误差范围 (正负 5 像素)
-        int tolerance = 5;
-        int correctX = Integer.parseInt(cacheCorrectX);
-        if (dto.getSliderX() == null || Math.abs(dto.getSliderX() - correctX) > tolerance) {
-            throw new BusinessException("滑块验证失败，请重试");
+        ApiResponse<?> response = captchaApplication.matching(dto.getId(), dto.getData());
+        if (response.isSuccess()) {
+            redisTemplate.opsForValue().set(SLIDER_CAPTCHA_PREFIX + dto.getId(), "1", 2, TimeUnit.MINUTES);
         }
+        return response;
+    }
 
-        // 2. 滑块通过，执行发短信逻辑 (这里把原来的 sendSmsCode 改名为了 doSendSmsCode 避免接口冲突)
+    @Override
+    public void sendSmsCode(SendSmsDTO dto) {
+        if (dto == null || !StringUtils.hasText(dto.getCaptchaId())) {
+            throw new BusinessException("请先完成滑块验证");
+        }
+        String captchaKey = SLIDER_CAPTCHA_PREFIX + dto.getCaptchaId();
+        if (!redisTemplate.delete(captchaKey)) {
+            throw new BusinessException("滑块验证已过期，请重新验证");
+        }
         doSendSmsCode(dto.getPhone());
     }
 

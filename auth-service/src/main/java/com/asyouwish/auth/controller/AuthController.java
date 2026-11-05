@@ -1,5 +1,7 @@
 package com.asyouwish.auth.controller;
 
+import cloud.tianai.captcha.common.response.ApiResponse;
+import com.asyouwish.auth.dto.CaptchaCheckDTO;
 import com.asyouwish.auth.dto.PasswordLoginDTO;
 import com.asyouwish.auth.dto.SendSmsDTO;
 import com.asyouwish.auth.dto.SmsLoginDTO;
@@ -20,22 +22,42 @@ public class AuthController {
 
     private final UserService userService;
 
-    // 获取滑块验证码
-    @GetMapping("/captcha/slider")
-    public Result<Map<String, String>> getSliderCaptcha() {
-        return Result.success(userService.getSliderCaptcha());
+    // TianAI 官方协议：TAC Web SDK 直接消费其 ApiResponse。
+    @RequestMapping(value = "/captcha/gen", method = {RequestMethod.GET, RequestMethod.POST})
+    public ApiResponse<?> getSliderCaptcha() {
+        return userService.getSliderCaptcha();
     }
 
-    // 发送短信验证码（包含滑块校验）
+    // TianAI 官方协议：校验成功后 SDK 从 data 中取得验证码 id。
+    @PostMapping("/captcha/check")
+    public ApiResponse<?> checkSliderCaptcha(@RequestBody CaptchaCheckDTO dto) {
+        ApiResponse<?> response = userService.verifySliderCaptcha(dto);
+        if (!response.isSuccess()) {
+            return response;
+        }
+        return ApiResponse.ofSuccess(java.util.Collections.singletonMap("id", dto.getId()));
+    }
+
     @PostMapping("/sms/send")
-    public Result<Void> sendSms(@RequestBody SendSmsDTO dto) {
-        // dto 里面现在应该有 phone, captchaUuid, sliderX 三个字段
-        userService.verifySliderAndSendSms(dto);
+    public Result<Void> sendSms(@Valid @RequestBody SendSmsDTO dto) {
+        userService.sendSmsCode(dto);
         return Result.success();
     }
 
     /**
-     * 3. 短信验证码登录
+     * 3. 短信验证码注册
+     */
+    @PostMapping("/register/sms")
+    public Result<Map<String, String>> registerBySms(@Valid @RequestBody SmsRegisterDTO dto) {
+        String token = userService.registerBySms(dto);
+
+        Map<String, String> data = new HashMap<>();
+        data.put("token", token);
+        return Result.success(data);
+    }
+
+    /**
+     * 4. 短信验证码登录
      */
     @PostMapping("/login/sms")
     public Result<Map<String, String>> loginBySms(@RequestBody SmsLoginDTO dto) {

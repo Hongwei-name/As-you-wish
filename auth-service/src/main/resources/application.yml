@@ -3,7 +3,8 @@ spring:
     name: auth-service # 服务名称，nacos注册必须要有
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://mysql6.sqlpub.com:3311/im_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://mysql6.sqlpub.com:3311/im_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+
     username: im_platform
     password: rwxS4bi1AOrvdyrV
   cloud:
@@ -27,6 +28,15 @@ mybatis-plus:
   global-config:
     banner: false
 captcha:
-  init-default-resource: true  # 使用自带背景图，省去找图麻烦
+  prefix: captcha
+  init-default-resource: true
   expire:
-    default: 60000
+    default: 10000
+  local-cache-enabled: true
+  local-cache-size: 20
+  local-cache-wait-time: 1000
+  local-cache-period: 5000
+  secondary:
+    enabled: false
+    expire: 120000
+    keyPrefix: "captcha:secondary"
