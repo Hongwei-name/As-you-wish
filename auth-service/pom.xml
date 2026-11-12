@@ -11,11 +11,7 @@
 
     <artifactId>auth-service</artifactId>
 
-    <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
+    <!-- Java 版本、release 与源码编码统一继承父模块。 -->
 
 
     <dependencies>
