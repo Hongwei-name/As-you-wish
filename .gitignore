@@ -1,3 +1,11 @@
+.maven-repository/
+.verification/
+
+# 真实环境配置仅保存在本机，示例模板纳入版本控制。
+.env
+.env.*
+!.env.example
+
 target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/

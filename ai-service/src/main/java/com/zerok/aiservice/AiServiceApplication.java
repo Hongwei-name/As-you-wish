@@ -8,6 +8,7 @@ public class AiServiceApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(AiServiceApplication.class, args);
+        System.out.println("==============ai-service启动成功==============");
     }
 
 }

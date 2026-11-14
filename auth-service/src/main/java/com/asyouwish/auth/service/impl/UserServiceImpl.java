@@ -5,42 +5,63 @@ import cloud.tianai.captcha.common.constant.CaptchaTypeConstant;
 import cloud.tianai.captcha.common.response.ApiResponse;
 import com.asyouwish.auth.dto.CaptchaCheckDTO;
 import com.asyouwish.auth.dto.PasswordLoginDTO;
+import com.asyouwish.auth.dto.PasswordResetDTO;
 import com.asyouwish.auth.dto.SendSmsDTO;
 import com.asyouwish.auth.dto.SmsLoginDTO;
 import com.asyouwish.auth.dto.SmsRegisterDTO;
+import com.asyouwish.auth.dto.UserInfoVO;
 import com.asyouwish.auth.entity.AuthUser;
 import com.asyouwish.auth.mapper.AuthUserMapper;
+import com.asyouwish.auth.service.AliyunPnvsProperties;
+import com.asyouwish.auth.service.SmsCodeService;
+import com.asyouwish.auth.service.SmsScene;
+import com.asyouwish.auth.service.TokenBlacklistService;
 import com.asyouwish.auth.service.UserService;
 import com.asyouwish.auth.util.BusinessException;
-import com.asyouwish.auth.util.IpUtil;
 import com.asyouwish.auth.util.JwtUtil;
+import com.asyouwish.auth.util.ResultCode;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.util.concurrent.ThreadLocalRandom;
+import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 认证业务实现：PNVS 短信发送/核验、注册/登录、JWT 签发、账号状态、限流与密码重置。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<AuthUserMapper, AuthUser> implements UserService {
 
+    private static final String PNVS_LIMIT_PREFIX = "auth:pnvs:limit:";
+    private static final String PNVS_IP_MINUTE_PREFIX = "auth:pnvs:ip:minute:";
+    private static final String PNVS_DAY_PHONE_PREFIX = "auth:pnvs:day:phone:";
+    private static final String PNVS_DAY_IP_PREFIX = "auth:pnvs:day:ip:";
+    private static final String PNVS_CHECK_ATTEMPT_PREFIX = "auth:pnvs:check:attempt:";
+    private static final String SLIDER_CAPTCHA_PREFIX = "auth:captcha:slider:";
+    private static final String LOGIN_FAIL_PREFIX = "auth:login:fail:";
+    private static final int MAX_CHECK_ATTEMPTS = 5;
+    private static final long CHECK_ATTEMPT_MINUTES = 5;
+    private static final int MAX_LOGIN_FAILS = 5;
+    private static final long LOGIN_LOCK_MINUTES = 15;
+
     private final StringRedisTemplate redisTemplate;
     private final ImageCaptchaApplication captchaApplication;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
-
-    // 常量统一管理
-    private static final String SMS_CODE_PREFIX = "auth:sms:code:";
-    private static final String SMS_LIMIT_PREFIX = "auth:sms:limit:";
-    private static final String SLIDER_CAPTCHA_PREFIX = "auth:captcha:slider:"; // 新增滑块前缀
-    private static final long SMS_CODE_EXPIRE_MINUTES = 5;
+    private final SmsCodeService smsCodeService;
+    private final AliyunPnvsProperties pnvsProperties;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     public AuthUser getUserByPhone(String phone) {
@@ -70,107 +91,234 @@ public class UserServiceImpl extends ServiceImpl<AuthUserMapper, AuthUser> imple
     }
 
     @Override
-    public void sendSmsCode(SendSmsDTO dto) {
+    public void sendSmsCode(SendSmsDTO dto, String ip) {
         if (dto == null || !StringUtils.hasText(dto.getCaptchaId())) {
             throw new BusinessException("请先完成滑块验证");
         }
-        String captchaKey = SLIDER_CAPTCHA_PREFIX + dto.getCaptchaId();
-        if (!redisTemplate.delete(captchaKey)) {
-            throw new BusinessException("滑块验证已过期，请重新验证");
-        }
-        doSendSmsCode(dto.getPhone());
-    }
+        SmsScene scene = SmsScene.fromCode(dto.getScene());
+        String clientIp = normalizeIp(ip);
 
-    /**
-     * 真正的发短信逻辑（抽离为私有方法，不暴露在接口外）
-     */
-    private void doSendSmsCode(String phone) {
-        // 1. 60秒防刷校验
-        String limitKey = SMS_LIMIT_PREFIX + phone;
-        if (redisTemplate.hasKey(limitKey)) {
+        // 三个场景使用不同的 Redis 维度，互不占用额度。
+        incrementIpMinuteCounter(scene, clientIp);
+        checkDailyLimits(scene, dto.getPhone(), clientIp);
+        String phoneLimitKey = phoneLimitKey(scene, dto.getPhone());
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(phoneLimitKey))) {
             throw new BusinessException("验证码发送过于频繁，请稍后再试");
         }
 
-        // 2. 单手机号每日上限
-        String dayPhoneKey = "auth:sms:day:phone:" + phone;
-        String phoneCountStr = redisTemplate.opsForValue().get(dayPhoneKey);
-        int phoneCount = phoneCountStr == null ? 0 : Integer.parseInt(phoneCountStr);
-        if (phoneCount >= 10) {
-            throw new BusinessException("该手机号今日发送次数已达上限");
+        String captchaKey = SLIDER_CAPTCHA_PREFIX + dto.getCaptchaId();
+        if (!Boolean.TRUE.equals(redisTemplate.delete(captchaKey))) {
+            throw new BusinessException("滑块验证已过期，请重新验证");
         }
 
-        // 3. 单 IP 每日上限
-        String ip = IpUtil.getClientIp();
-        String dayIpKey = "auth:sms:day:ip:" + ip;
-        String ipCountStr = redisTemplate.opsForValue().get(dayIpKey);
-        int ipCount = ipCountStr == null ? 0 : Integer.parseInt(ipCountStr);
-        if (ipCount >= 20) {
-            throw new BusinessException("当前网络环境异常，请更换网络或明日再试");
+        long interval = pnvsProperties.getInterval() == null ? 60L : pnvsProperties.getInterval();
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(phoneLimitKey, "1", Math.max(1L, interval), TimeUnit.SECONDS);
+        if (!Boolean.TRUE.equals(acquired)) {
+            throw new BusinessException("验证码发送过于频繁，请稍后再试");
         }
 
-        // 4. 生成 6 位随机验证码
-        String code = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
-        log.info("给手机号 {} (IP: {}) 发送验证码: {}", phone, ip, code);
-
-        // 5. TODO: 调用云厂商短信服务 API 发送短信
-        // smsService.sendSms(phone, code);
-
-        // 6. 存入 Redis 并设置过期时间
-        redisTemplate.opsForValue().set(SMS_CODE_PREFIX + phone, code, SMS_CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
-        redisTemplate.opsForValue().set(limitKey, "1", 60, TimeUnit.SECONDS);
-
-        // 7. 成功发送后，限流计数+1
-        redisTemplate.opsForValue().increment(dayPhoneKey);
-        redisTemplate.expire(dayPhoneKey, 24, TimeUnit.HOURS);
-        redisTemplate.opsForValue().increment(dayIpKey);
-        redisTemplate.expire(dayIpKey, 24, TimeUnit.HOURS);
+        // PNVS/控制台实现由当前 profile 决定；生产走 PNVS，测试只打印验证码。
+        smsCodeService.send(scene, dto.getPhone());
+        incrementDailyCounter(PNVS_DAY_PHONE_PREFIX + scene.getCode() + ":" + dto.getPhone());
+        incrementDailyCounter(PNVS_DAY_IP_PREFIX + scene.getCode() + ":" + clientIp);
+        redisTemplate.delete(checkAttemptKey(scene, dto.getPhone()));
     }
 
-    // ======== 下方其他方法 (注册/登录等) 保持你原来的代码不变即可 ========
+    private void incrementIpMinuteCounter(SmsScene scene, String ip) {
+        String key = PNVS_IP_MINUTE_PREFIX + scene.getCode() + ":" + ip;
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count != null && count == 1L) {
+            redisTemplate.expire(key, 60, TimeUnit.SECONDS);
+        }
+        int limit = pnvsProperties.getRateLimit().getIpPerMinute();
+        if (count != null && count > limit) {
+            throw new BusinessException("当前网络请求过于频繁，请稍后再试");
+        }
+    }
+
+    private void checkDailyLimits(SmsScene scene, String phone, String ip) {
+        int phoneDaily = pnvsProperties.getRateLimit().getPhoneDaily();
+        int ipDaily = pnvsProperties.getRateLimit().getIpDaily();
+        if (readCounter(PNVS_DAY_PHONE_PREFIX + scene.getCode() + ":" + phone) >= phoneDaily) {
+            throw new BusinessException("该手机号今日发送次数已达上限");
+        }
+        if (readCounter(PNVS_DAY_IP_PREFIX + scene.getCode() + ":" + ip) >= ipDaily) {
+            throw new BusinessException("当前网络环境今日发送次数已达上限");
+        }
+    }
+
+    private String phoneLimitKey(SmsScene scene, String phone) {
+        return PNVS_LIMIT_PREFIX + scene.getCode() + ":" + phone;
+    }
+
+    private String checkAttemptKey(SmsScene scene, String phone) {
+        return PNVS_CHECK_ATTEMPT_PREFIX + scene.getCode() + ":" + phone;
+    }
+
+    private int readCounter(String key) {
+        String value = redisTemplate.opsForValue().get(key);
+        if (!StringUtils.hasText(value)) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException exception) {
+            return 0;
+        }
+    }
+
+    private void incrementDailyCounter(String key) {
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count != null && count == 1L) {
+            redisTemplate.expire(key, 24, TimeUnit.HOURS);
+        }
+    }
 
     @Override
+    @Transactional
     public String registerBySms(SmsRegisterDTO dto) {
-        verifySmsCode(dto.getPhone(), dto.getCode());
+        verifySmsCode(SmsScene.REGISTER, dto.getPhone(), dto.getCode());
         if (getUserByPhone(dto.getPhone()) != null) {
-            throw new BusinessException("该手机号已注册，请直接登录");
+            throw new BusinessException(ResultCode.PHONE_ALREADY_EXISTS);
         }
         AuthUser user = new AuthUser();
         user.setPhone(dto.getPhone());
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
         user.setUsername("用户_" + dto.getPhone());
-        this.save(user);
+        user.setNickname("用户_" + dto.getPhone());
+        user.setStatus(1);
+        user.setCreateTime(LocalDateTime.now());
+        user.setUpdateTime(LocalDateTime.now());
+        try {
+            this.save(user);
+        } catch (DuplicateKeyException exception) {
+            throw new BusinessException(ResultCode.PHONE_ALREADY_EXISTS);
+        }
         return jwtUtil.generateToken(user.getId(), user.getPhone());
     }
 
     @Override
-    public String loginBySms(SmsLoginDTO dto) {
-        verifySmsCode(dto.getPhone(), dto.getCode());
+    public String loginBySms(SmsLoginDTO dto, String ip) {
+        verifySmsCode(SmsScene.LOGIN, dto.getPhone(), dto.getCode());
         AuthUser user = getUserByPhone(dto.getPhone());
         if (user == null) {
-            throw new BusinessException("该手机号未注册，请先注册");
+            throw new BusinessException(ResultCode.PHONE_NOT_EXISTS);
         }
+        checkUserStatus(user);
+        updateLoginInfo(user, ip);
         return jwtUtil.generateToken(user.getId(), user.getPhone());
     }
 
     @Override
-    public String loginByPassword(PasswordLoginDTO dto) {
+    public String loginByPassword(PasswordLoginDTO dto, String ip) {
+        ensureLoginAllowed(dto.getPhone());
         AuthUser user = getUserByPhone(dto.getPhone());
-        if (user == null || !passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
-            throw new BusinessException("账号或密码错误");
+        boolean passwordMatched = user != null
+                && StringUtils.hasText(user.getPassword())
+                && passwordEncoder.matches(dto.getPassword(), user.getPassword());
+        if (!passwordMatched) {
+            recordLoginFailure(dto.getPhone());
+            throw new BusinessException(ResultCode.PASSWORD_ERROR);
         }
+        checkUserStatus(user);
+        clearLoginFailures(dto.getPhone());
+        updateLoginInfo(user, ip);
         return jwtUtil.generateToken(user.getId(), user.getPhone());
     }
 
-    private void verifySmsCode(String phone, String inputCode) {
-        String cacheKey = SMS_CODE_PREFIX + phone;
-        String cacheCode = redisTemplate.opsForValue().get(cacheKey);
+    @Override
+    public UserInfoVO getUserInfo(Long userId) {
+        AuthUser user = this.getById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        checkUserStatus(user);
+        return new UserInfoVO(user.getId(), user.getPhone(), user.getNickname(), user.getAvatar());
+    }
 
-        if (!StringUtils.hasText(cacheCode)) {
-            throw new BusinessException("验证码已过期，请重新获取");
+    @Override
+    public void logout(String token) {
+        if (!StringUtils.hasText(token)) {
+            return;
         }
-        redisTemplate.delete(cacheKey);
-        if (!cacheCode.equals(inputCode)) {
-            throw new BusinessException("验证码错误");
+        try {
+            Claims claims = jwtUtil.parseToken(token);
+            tokenBlacklistService.blacklist(claims);
+        } catch (Exception exception) {
+            log.debug("退出登录 Token 已失效，无需加入黑名单");
         }
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(PasswordResetDTO dto) {
+        verifySmsCode(SmsScene.RESET_PASSWORD, dto.getPhone(), dto.getCode());
+        AuthUser user = getUserByPhone(dto.getPhone());
+        if (user == null) {
+            throw new BusinessException(ResultCode.PHONE_NOT_EXISTS);
+        }
+        checkUserStatus(user);
+        user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
+        user.setUpdateTime(LocalDateTime.now());
+        this.updateById(user);
+        clearLoginFailures(dto.getPhone());
+    }
+
+    private void verifySmsCode(SmsScene scene, String phone, String inputCode) {
+        if (!StringUtils.hasText(phone) || !StringUtils.hasText(inputCode)) {
+            throw new BusinessException("手机号或验证码不能为空");
+        }
+        String attemptKey = checkAttemptKey(scene, phone);
+        Long attempts = redisTemplate.opsForValue().increment(attemptKey);
+        if (attempts != null && attempts == 1L) {
+            redisTemplate.expire(attemptKey, CHECK_ATTEMPT_MINUTES, TimeUnit.MINUTES);
+        }
+        if (attempts != null && attempts > MAX_CHECK_ATTEMPTS) {
+            throw new BusinessException("验证码尝试次数过多，请重新获取");
+        }
+
+        boolean passed = smsCodeService.verify(scene, phone, inputCode);
+        if (!passed) {
+            throw new BusinessException(ResultCode.SMS_CODE_ERROR);
+        }
+        redisTemplate.delete(attemptKey);
+    }
+
+    private void ensureLoginAllowed(String phone) {
+        String key = LOGIN_FAIL_PREFIX + phone;
+        if (readCounter(key) >= MAX_LOGIN_FAILS) {
+            throw new BusinessException("登录尝试次数过多，请 15 分钟后再试");
+        }
+    }
+
+    private void recordLoginFailure(String phone) {
+        String key = LOGIN_FAIL_PREFIX + phone;
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count != null && count == 1L) {
+            redisTemplate.expire(key, LOGIN_LOCK_MINUTES, TimeUnit.MINUTES);
+        }
+    }
+
+    private void clearLoginFailures(String phone) {
+        redisTemplate.delete(LOGIN_FAIL_PREFIX + phone);
+    }
+
+    private void checkUserStatus(AuthUser user) {
+        if (user.getStatus() != null && user.getStatus() != 1) {
+            throw new BusinessException("账号已被禁用或锁定，请联系客服");
+        }
+    }
+
+    private void updateLoginInfo(AuthUser user, String ip) {
+        AuthUser update = new AuthUser();
+        update.setId(user.getId());
+        update.setLastLoginIp(normalizeIp(ip));
+        update.setLastLoginTime(LocalDateTime.now());
+        this.updateById(update);
+    }
+
+    private String normalizeIp(String ip) {
+        return StringUtils.hasText(ip) ? ip : "unknown";
     }
 }

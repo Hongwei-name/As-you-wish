@@ -4,10 +4,14 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
+import java.nio.charset.StandardCharsets;
 
 import java.security.Key;
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * JWT 工具类 (基于 jjwt 0.11.5 版本)
@@ -15,22 +19,21 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
-    /**
-     * 签名密钥 (生产环境建议配置在 application.yml 中)
-     * 注意：0.11.5 版本中，使用 HS256 算法，密钥长度必须大于等于 32 个字符。
-     */
-    private static final String SECRET_KEY = "AsYouWish_Auth_Service_SecretKey_2024_MustBeLongEnough!";
+    private final Key key;
+    private final long expireMillis;
 
-    /**
-     * Token 过期时间 (单位：毫秒)
-     * 这里设置为 7 天 (7 * 24 * 60 * 60 * 1000)
-     */
-    private static final long EXPIRE_TIME = 604800000L;
-
-    /**
-     * 生成签名密钥
-     */
-    private final Key key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
+    public JwtUtil(@Value("${jwt.secret}") String secret,
+                   @Value("${jwt.expire-millis:604800000}") long expireMillis) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalArgumentException("JWT_SECRET must be configured");
+        }
+        if (expireMillis <= 0) {
+            throw new IllegalArgumentException("JWT_EXPIRE_MILLIS must be positive");
+        }
+        // Keys 同时验证 HS256 密钥至少包含 32 字节；禁止使用源码内默认密钥。
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.expireMillis = expireMillis;
+    }
 
     /**
      * 生成 Token
@@ -41,11 +44,13 @@ public class JwtUtil {
      */
     public String generateToken(Long userId, String phone) {
         Date now = new Date();
-        Date expiration = new Date(now.getTime() + EXPIRE_TIME);
+        Date expiration = new Date(now.getTime() + expireMillis);
 
         return Jwts.builder()
                 // 设置主题 (通常放用户唯一标识 ID)
                 .setSubject(String.valueOf(userId))
+                // 唯一标识，用于退出登录黑名单
+                .setId(UUID.randomUUID().toString())
                 // 自定义载荷，放入手机号等非敏感信息
                 .claim("phone", phone)
                 // 签发时间

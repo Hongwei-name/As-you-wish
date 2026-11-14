@@ -7,10 +7,11 @@
 当前技术基线：
 
 - Java 17
-- Spring Boot 2.7.18
-- Spring Cloud 2021.0.7
-- Spring Cloud Alibaba 2021.0.1.0
-- MyBatis-Plus 3.5.3.1
+- Spring Boot 3.5.7
+- Spring Cloud 2025.0.0
+- Spring Cloud Alibaba 2025.0.0.0
+- Spring AI 1.1.8（AI 服务）
+- MyBatis-Plus 3.5.12（Spring Boot 3 starter）
 - MySQL
 - Redis
 - Nacos 服务发现
@@ -116,11 +117,15 @@ HTTP 请求
 认证相关职责：
 
 - `/auth/captcha/gen`（兼容 GET/POST）与 `/auth/captcha/check`：使用 TianAI Captcha 1.5.6 官方 `ImageCaptchaApplication` 生成和校验滑块验证码；这两个端点直接返回 TianAI `ApiResponse` 以兼容官方 Web SDK。启用 Redis `ResourceStore` 时必须注册至少一张 `SLIDER` 背景资源；默认模板只提供拼图形状，不提供可随机选择的背景图。
-- `/auth/sms/send`：只接受一次性消费的、已通过 TianAI 校验的 `captchaId`，再校验手机号、执行手机号和 IP 限流、生成验证码、调用短信供应商、写入 Redis。
+- `/auth/sms/send`：只接受一次性消费的、已通过 TianAI 校验的 `captchaId`，再校验手机号；按 `register` / `login` / `reset-password` 场景分别执行 60 秒手机号锁、单 IP 每分钟限制和每日上限。随后按 profile 选择实现：`test` 使用 `ConsoleSmsCodeService` 在控制台打印验证码；`prod` 调用号码认证 PNVS `SendSmsVerifyCode`。生产验证码由阿里云生成，后端不生成、不保存、不返回验证码明文。
 - `/auth/register/sms`：校验一次性验证码、检查手机号唯一性、使用 Argon2 保存密码、创建用户并签发 JWT。
 - `/auth/login/sms`：校验一次性验证码、查询用户状态并签发 JWT。
 - `/auth/login/password`：查询用户、校验密码和账号状态并签发 JWT。
-- 受保护接口：由 JWT 过滤器解析 `Authorization: Bearer <token>`，校验签名、有效期和用户身份后写入 Spring Security 上下文。
+- 短信注册、短信登录和密码重置：`test` 直接核验 Redis 中由控制台实现写入的验证码；`prod` 调用 PNVS `CheckSmsVerifyCode`，使用各自场景的模板和方案名，`Model.VerifyResult=PASS` 才视为成功。
+- `/auth/me`：受保护接口，由 JWT 过滤器注入当前用户 ID，返回不含密码的安全用户信息。
+- `/auth/logout`：受保护接口，将当前 JWT 的 `jti` 写入 Redis 黑名单，使 Token 在剩余有效期内失效。
+- `/auth/password/reset`：校验一次性短信验证码后重置密码；已签发的旧 Token 不会立即失效。
+- 受保护接口：由 JWT 过滤器解析 `Authorization: Bearer <token>`，校验签名、有效期、黑名单和用户状态后写入 Spring Security 上下文。
 
 JWT 生成、解析和校验集中在 `JwtUtil` 或专用认证组件中。Controller 和普通业务代码不得自行解析 Token。JWT 密钥、过期时间等必须来自外部配置或密钥管理系统，禁止写死在 Java 源码中。
 
@@ -130,7 +135,8 @@ JWT 生成、解析和校验集中在 `JwtUtil` 或专用认证组件中。Contr
 - 验证码有明确过期时间，成功校验或失败达到策略阈值后失效。
 - 手机号限流与 IP 限流都要有原子计数和过期时间。
 - 生产环境不得通过日志输出真实验证码。
-- 供应商调用应抽象为独立组件，Service 只依赖接口。
+- PNVS 调用统一封装在 `AliyunPnvsSmsService`（仅 `prod` profile）；`test`/非生产 profile 使用 `ConsoleSmsCodeService`，只把验证码打印到控制台，不访问阿里云。
+- PNVS 错误码由 `PnvsErrorMapper` 统一映射为友好业务提示，原始 code/message 只记录在服务端日志。
 - 手机号、IP、验证码等输入必须校验格式和长度。
 
 ## 5. 接口与数据规范
@@ -158,7 +164,7 @@ JWT 生成、解析和校验集中在 `JwtUtil` 或专用认证组件中。Contr
 
 ## 6. 安全与配置
 
-当前配置中存在数据库连接凭据，当前 `JwtUtil` 中存在硬编码签名密钥。继续开发前必须完成以下整改：
+数据库、JWT 和第三方服务密钥统一通过 `.env` 等外部配置注入，不得写入源码或版本库。继续开发前必须确保：
 
 1. 从源码和提交历史可见配置中移除真实数据库密码、JWT 密钥及第三方服务密钥。
 2. 使用环境变量、外部配置中心或密钥管理服务注入敏感配置。
@@ -196,14 +202,12 @@ JWT 生成、解析和校验集中在 `JwtUtil` 或专用认证组件中。Contr
 
 ## 9. 当前待修复项
 
-以下问题已经在现有代码中发现，修复时应优先处理：
+以下问题仍需处理：
 
-- `AuthController` 当前调用 `sendSmsCode` 时缺少 IP 参数，而 `UserService` 已定义为 `sendSmsCode(String phone, String ip)`；应统一由请求层解析可信客户端 IP 后传入。
-- `UserServiceImpl` 存在未完成的字段声明，当前实现需要先恢复可编译状态。
-- `SmsRegisterDTO` 只有密码做校验，手机号和验证码也必须补充校验。
-- `SmsLoginDTO`、`PasswordLoginDTO`、`SendSmsDTO` 的输入校验尚不完整。
-- JWT 过滤器和用户认证上下文尚未实现，应补齐后再开放受保护业务接口。
+- 生产环境 PNVS 的 AccessKey、签名和模板需在 `.env` 的 `_PROD` 变量中配置；`test` profile 使用控制台验证码，不需要阿里云凭据。
 - `application-dev.yml` 为空，环境配置应明确区分开发、测试和生产，并避免把真实凭据写入版本库。
+- 密码重置后已签发的旧 Token 在过期前仍然有效；如需立即全端失效，应增加用户级 Token 版本或全量吊销机制。
+- 认证模块尚无自动化测试；新增 JWT、验证码限流、密码重置和 PNVS 错误映射逻辑后应补充服务层和接口层测试。
 
 修复这些项目时保持小步提交，每次变更只解决一个清晰问题，并在提交说明中注明验证命令和外部依赖条件。
 

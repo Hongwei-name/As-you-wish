@@ -3,22 +3,34 @@ package com.asyouwish.auth.controller;
 import cloud.tianai.captcha.common.response.ApiResponse;
 import com.asyouwish.auth.dto.CaptchaCheckDTO;
 import com.asyouwish.auth.dto.PasswordLoginDTO;
+import com.asyouwish.auth.dto.PasswordResetDTO;
 import com.asyouwish.auth.dto.SendSmsDTO;
 import com.asyouwish.auth.dto.SmsLoginDTO;
 import com.asyouwish.auth.dto.SmsRegisterDTO;
+import com.asyouwish.auth.dto.UserInfoVO;
 import com.asyouwish.auth.service.UserService;
+import com.asyouwish.auth.util.BusinessException;
+import com.asyouwish.auth.util.IpUtil;
 import com.asyouwish.auth.util.Result;
+import com.asyouwish.auth.util.ResultCode;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import javax.validation.Valid;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * 认证服务接口：滑块验证码、短信发送、注册、登录、当前用户、退出登录与密码重置。
+ */
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
 public class AuthController {
+
+    private static final String BEARER_PREFIX = "Bearer ";
 
     private final UserService userService;
 
@@ -30,7 +42,7 @@ public class AuthController {
 
     // TianAI 官方协议：校验成功后 SDK 从 data 中取得验证码 id。
     @PostMapping("/captcha/check")
-    public ApiResponse<?> checkSliderCaptcha(@RequestBody CaptchaCheckDTO dto) {
+    public ApiResponse<?> checkSliderCaptcha(@Valid @RequestBody CaptchaCheckDTO dto) {
         ApiResponse<?> response = userService.verifySliderCaptcha(dto);
         if (!response.isSuccess()) {
             return response;
@@ -39,44 +51,56 @@ public class AuthController {
     }
 
     @PostMapping("/sms/send")
-    public Result<Void> sendSms(@Valid @RequestBody SendSmsDTO dto) {
-        userService.sendSmsCode(dto);
+    public Result<Void> sendSms(@Valid @RequestBody SendSmsDTO dto, HttpServletRequest request) {
+        userService.sendSmsCode(dto, IpUtil.getClientIp(request));
         return Result.success();
     }
 
-    /**
-     * 3. 短信验证码注册
-     */
     @PostMapping("/register/sms")
     public Result<Map<String, String>> registerBySms(@Valid @RequestBody SmsRegisterDTO dto) {
         String token = userService.registerBySms(dto);
-
-        Map<String, String> data = new HashMap<>();
-        data.put("token", token);
-        return Result.success(data);
+        return Result.success(tokenData(token));
     }
 
-    /**
-     * 4. 短信验证码登录
-     */
     @PostMapping("/login/sms")
-    public Result<Map<String, String>> loginBySms(@RequestBody SmsLoginDTO dto) {
-        String token = userService.loginBySms(dto);
-
-        Map<String, String> data = new HashMap<>();
-        data.put("token", token);
-        return Result.success(data);
+    public Result<Map<String, String>> loginBySms(@Valid @RequestBody SmsLoginDTO dto,
+                                                 HttpServletRequest request) {
+        String token = userService.loginBySms(dto, IpUtil.getClientIp(request));
+        return Result.success(tokenData(token));
     }
 
-    /**
-     * 4. 手机号 + 密码登录
-     */
     @PostMapping("/login/password")
-    public Result<Map<String, String>> loginByPassword(@RequestBody PasswordLoginDTO dto) {
-        String token = userService.loginByPassword(dto);
+    public Result<Map<String, String>> loginByPassword(@Valid @RequestBody PasswordLoginDTO dto,
+                                                       HttpServletRequest request) {
+        String token = userService.loginByPassword(dto, IpUtil.getClientIp(request));
+        return Result.success(tokenData(token));
+    }
 
+    @GetMapping("/me")
+    public Result<UserInfoVO> me(@AuthenticationPrincipal Long userId) {
+        if (userId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        return Result.success(userService.getUserInfo(userId));
+    }
+
+    @PostMapping("/logout")
+    public Result<Void> logout(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        if (authorization != null && authorization.startsWith(BEARER_PREFIX)) {
+            userService.logout(authorization.substring(BEARER_PREFIX.length()).trim());
+        }
+        return Result.success();
+    }
+
+    @PostMapping("/password/reset")
+    public Result<Void> resetPassword(@Valid @RequestBody PasswordResetDTO dto) {
+        userService.resetPassword(dto);
+        return Result.success();
+    }
+
+    private Map<String, String> tokenData(String token) {
         Map<String, String> data = new HashMap<>();
         data.put("token", token);
-        return Result.success(data);
+        return data;
     }
 }

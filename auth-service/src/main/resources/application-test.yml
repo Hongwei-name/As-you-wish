@@ -1,0 +1,12 @@
+# test profile 使用 ConsoleSmsCodeService，不调用阿里云；以下 PNVS 值仅保留给显式切到 prod 的场景。
+aliyun:
+  pnvs:
+    access-key-id: ${ALIYUN_PNVS_ACCESS_KEY_ID_TEST:}
+    access-key-secret: ${ALIYUN_PNVS_ACCESS_KEY_SECRET_TEST:}
+    sign-name: ${ALIYUN_PNVS_SIGN_NAME_TEST:}
+    register-template-code: ${ALIYUN_PNVS_TEMPLATE_REGISTER_TEST:}
+    login-template-code: ${ALIYUN_PNVS_TEMPLATE_LOGIN_TEST:}
+    reset-password-template-code: ${ALIYUN_PNVS_TEMPLATE_RESET_TEST:}
+    register-scheme-name: ${ALIYUN_PNVS_SCHEME_REGISTER_TEST:}
+    login-scheme-name: ${ALIYUN_PNVS_SCHEME_LOGIN_TEST:}
+    reset-password-scheme-name: ${ALIYUN_PNVS_SCHEME_RESET_TEST:}

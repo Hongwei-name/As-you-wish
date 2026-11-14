@@ -1,0 +1,11 @@
+aliyun:
+  pnvs:
+    access-key-id: ${ALIYUN_PNVS_ACCESS_KEY_ID_PROD:}
+    access-key-secret: ${ALIYUN_PNVS_ACCESS_KEY_SECRET_PROD:}
+    sign-name: ${ALIYUN_PNVS_SIGN_NAME_PROD:}
+    register-template-code: ${ALIYUN_PNVS_TEMPLATE_REGISTER_PROD:}
+    login-template-code: ${ALIYUN_PNVS_TEMPLATE_LOGIN_PROD:}
+    reset-password-template-code: ${ALIYUN_PNVS_TEMPLATE_RESET_PROD:}
+    register-scheme-name: ${ALIYUN_PNVS_SCHEME_REGISTER_PROD:}
+    login-scheme-name: ${ALIYUN_PNVS_SCHEME_LOGIN_PROD:}
+    reset-password-scheme-name: ${ALIYUN_PNVS_SCHEME_RESET_PROD:}

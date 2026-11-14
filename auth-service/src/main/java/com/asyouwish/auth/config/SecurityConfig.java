@@ -3,6 +3,7 @@ package com.asyouwish.auth.config;
 import com.asyouwish.auth.util.Result;
 import com.asyouwish.auth.util.ResultCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -11,8 +12,9 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 
@@ -34,33 +36,49 @@ public class SecurityConfig {
     }
 
     /**
+     * 禁止 Spring Boot 把 JWT 过滤器自动注册为普通 Servlet Filter。
+     * 它必须只由 SecurityFilterChain 执行，否则会在 Security 上下文初始化前运行并丢失认证信息。
+     */
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistration(
+            JwtAuthenticationFilter jwtAuthenticationFilter) {
+        FilterRegistrationBean<JwtAuthenticationFilter> registration =
+                new FilterRegistrationBean<>(jwtAuthenticationFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    /**
      * 配置安全过滤链
      */
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
         // 引入 Jackson 对象，用于将 Result 对象转为 JSON 输出到前端
         ObjectMapper objectMapper = new ObjectMapper();
 
         http
                 // 1. 前后端分离项目，关闭 CSRF 跨站请求伪造防护
-                .csrf().disable()
+                .csrf(csrf -> csrf.disable())
                 // 2. 关闭默认的表单登录
-                .formLogin().disable()
+                .formLogin(form -> form.disable())
                 // 3. 关闭 HTTP Basic 认证（关闭弹窗）
-                .httpBasic().disable()
+                .httpBasic(basic -> basic.disable())
                 // 4. 因为使用 JWT，所以禁用 Session
-                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                .and()
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // 5. 配置请求拦截规则
                 .authorizeHttpRequests(auth -> auth
                         // 放行 Knife4j 接口文档相关的资源路径
-                        .antMatchers("/doc.html", "/webjars/**", "/v2/api-docs", "/swagger-resources/**").permitAll()
-                        // 放行登录、注册、发送验证码接口
-                        .antMatchers("/auth/sms/send", "/auth/register/**", "/auth/login/**","/auth/captcha/**").permitAll()
+                        .requestMatchers("/doc.html", "/webjars/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // 放行登录、注册、发送验证码、密码重置接口
+                        .requestMatchers("/auth/sms/send", "/auth/register/**", "/auth/login/**",
+                                "/auth/captcha/**", "/auth/password/**").permitAll()
 
-                        // 其他所有请求都需要认证 (后续会写 JWT Filter 拦截)
+                        // 其他所有请求都需要认证
                         .anyRequest().authenticated()
                 )
+                // JWT 过滤器：解析 Bearer Token 并写入 SecurityContext
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 // 6. 自定义异常处理（未登录或无权限时，返回统一的 JSON 格式，而不是 HTML 页面）
                 .exceptionHandling(exception -> exception
                         // 未登录（没有 Token 或 Token 无效）时的处理

@@ -1,11 +1,15 @@
 package com.asyouwish.auth.config;
 
+import com.asyouwish.auth.service.PnvsException;
 import com.asyouwish.auth.util.BusinessException;
 import com.asyouwish.auth.util.Result;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -31,11 +35,46 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public Result<?> handleValidException(MethodArgumentNotValidException e) {
-        // 获取第一个字段的校验错误信息
         FieldError fieldError = e.getBindingResult().getFieldError();
         String message = fieldError != null ? fieldError.getDefaultMessage() : "参数校验失败";
         log.warn("参数校验异常: {}", message);
         return Result.failed(400, message);
+    }
+
+    @ExceptionHandler(BindException.class)
+    public Result<?> handleBindException(BindException e) {
+        FieldError fieldError = e.getBindingResult().getFieldError();
+        String message = fieldError != null ? fieldError.getDefaultMessage() : "参数绑定失败";
+        log.warn("参数绑定异常: {}", message);
+        return Result.failed(400, message);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public Result<?> handleConstraintViolation(ConstraintViolationException e) {
+        log.warn("参数约束异常: {}", e.getMessage());
+        return Result.failed(400, "参数校验失败");
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public Result<?> handleUnreadableBody(HttpMessageNotReadableException e) {
+        log.warn("请求体解析失败: {}", e.getMessage());
+        return Result.failed(400, "请求参数格式不正确");
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public Result<?> handleMissingParameter(MissingServletRequestParameterException e) {
+        log.warn("缺少请求参数: {}", e.getParameterName());
+        return Result.failed(400, "缺少必要参数");
+    }
+
+    @ExceptionHandler(PnvsException.class)
+    public Result<?> handlePnvsException(PnvsException e) {
+        if (e.isBusiness()) {
+            log.warn("PNVS 业务错误: code={}, message={}", e.getProviderCode(), e.getMessage());
+            return Result.failed(400, e.getMessage());
+        }
+        log.error("PNVS 系统错误: code={}", e.getProviderCode(), e);
+        return Result.failed(500, e.getMessage());
     }
 
     /**

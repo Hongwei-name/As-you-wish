@@ -1,30 +1,28 @@
 package com.asyouwish.auth.config;
 
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import springfox.documentation.builders.ApiInfoBuilder;
-import springfox.documentation.builders.PathSelectors;
-import springfox.documentation.builders.RequestHandlerSelectors;
-import springfox.documentation.spi.DocumentationType;
-import springfox.documentation.spring.web.plugins.Docket;
-import springfox.documentation.swagger2.annotations.EnableSwagger2WebMvc;
 
 @Configuration
-@EnableSwagger2WebMvc
 public class Knife4jConfig {
 
     @Bean
-    public Docket defaultApi() {
-        return new Docket(DocumentationType.SWAGGER_2)
-                .apiInfo(new ApiInfoBuilder()
-                        .title("认证服务接口文档")
-                        .description("auth-service 登录注册接口")
-                        .version("1.0")
-                        .build())
-                .select()
-                // 只扫描 controller 包下的接口
-                .apis(RequestHandlerSelectors.basePackage("com.asyouwish.auth.controller"))
-                .paths(PathSelectors.any())
+    public OpenAPI authOpenApi() {
+        return new OpenAPI().info(new Info()
+                .title("认证服务接口文档")
+                .description("auth-service 登录注册接口")
+                .version("1.0"));
+    }
+
+    @Bean
+    public GroupedOpenApi defaultApi() {
+        return GroupedOpenApi.builder()
+                .group("auth")
+                .packagesToScan("com.asyouwish.auth.controller")
+                .pathsToMatch("/auth/**")
                 .build();
     }
 }

@@ -26,7 +26,8 @@ public class CommonConfiguration {
         return ChatClient
                 .builder(model)
                 .defaultSystem("你是'如你所愿'商城的智能助手。" +
-                        "你的名字叫小愿.你会帮助客人推荐'如你所愿'商城上适合他的商品,请以小愿的身份和语气回答问题")
+                        "你的名字叫小愿.你会帮助客人推荐'如你所愿'商城上适合他的商品,请以小愿的身份和语气回答问题。" +
+                        "推荐前先了解用户的需求；如果没有拿到真实的商品或订单数据，不要编造商品名称、价格或购买记录，可以说明相关服务正在准备中。")
                 .defaultAdvisors(
                         MessageChatMemoryAdvisor.builder(chatMemory).build()//记忆Advisor
                 )//配置日志Advisor

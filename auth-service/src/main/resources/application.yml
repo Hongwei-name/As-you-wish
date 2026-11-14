@@ -1,32 +1,71 @@
 spring:
+  config:
+    # 支持在后端根目录或模块目录启动；.env 使用 KEY=value 格式，不加引号。
+    import: "optional:file:../.env[.properties],optional:file:./.env[.properties]"
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:test}
   application:
-    name: auth-service # 服务名称，nacos注册必须要有
+    name: auth-service
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://mysql6.sqlpub.com:3311/im_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-
-    username: im_platform
-    password: rwxS4bi1AOrvdyrV
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   cloud:
     nacos:
-          discovery:
-            server-addr: 127.0.0.1:8848
-
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR}
+        username: ${NACOS_USERNAME}
+        password: ${NACOS_PASSWORD}
+        namespace: ${NACOS_NAMESPACE}
+        group: ${NACOS_GROUP}
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: 
+      database: 0
 
 server:
   port: 2003
 
-# nacos配置
+# 阿里云号码认证 PNVS（短信认证）公共配置；AK、签名和模板按 test/prod profile 注入。
+aliyun:
+  pnvs:
+    endpoint: ${ALIYUN_PNVS_ENDPOINT:dypnsapi.aliyuncs.com}
+    country-code: "86"
+    code-length: 6
+    code-type: 1
+    valid-time: 300
+    interval: 60
+    duplicate-policy: 1
+    # 赠送模板 100001/100003 需要 code 和 min 两个变量；min 为有效分钟数，与 valid-time 一致。
+    template-param: '{"code":"##code##","min":"5"}'
+    rate-limit:
+      ip-per-minute: 10
+      phone-daily: 10
+      ip-daily: 20
+
+jwt:
+  secret: ${JWT_SECRET}
+  expire-millis: 604800000
 
 mybatis-plus:
   mapper-locations: classpath:mapper/**/*.xml
   type-aliases-package: com.asyouwish.auth.entity
   configuration:
     map-underscore-to-camel-case: true
-    # 开发打开，生产注释掉！打印sql
-#    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     banner: false
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+knife4j:
+  enable: false
+
 captcha:
   prefix: captcha
   init-default-resource: true
