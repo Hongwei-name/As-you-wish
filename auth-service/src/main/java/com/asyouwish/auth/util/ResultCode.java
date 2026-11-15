@@ -20,7 +20,8 @@ public enum ResultCode {
     PHONE_ALREADY_EXISTS(1003, "手机号已注册"),
     PHONE_NOT_EXISTS(1004, "手机号未注册"),
     PASSWORD_ERROR(1005, "账号或密码错误"),
-    SMS_LIMIT(1006, "发送过于频繁，请稍后再试");
+    SMS_LIMIT(1006, "发送过于频繁，请稍后再试"),
+    OLD_PASSWORD_ERROR(1007, "原密码不正确");
 
     private final Integer code;
     private final String message;

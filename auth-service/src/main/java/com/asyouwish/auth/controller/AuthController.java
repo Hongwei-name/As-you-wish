@@ -2,11 +2,13 @@ package com.asyouwish.auth.controller;
 
 import cloud.tianai.captcha.common.response.ApiResponse;
 import com.asyouwish.auth.dto.CaptchaCheckDTO;
+import com.asyouwish.auth.dto.ChangePasswordDTO;
 import com.asyouwish.auth.dto.PasswordLoginDTO;
 import com.asyouwish.auth.dto.PasswordResetDTO;
 import com.asyouwish.auth.dto.SendSmsDTO;
 import com.asyouwish.auth.dto.SmsLoginDTO;
 import com.asyouwish.auth.dto.SmsRegisterDTO;
+import com.asyouwish.auth.dto.UpdateProfileDTO;
 import com.asyouwish.auth.dto.UserInfoVO;
 import com.asyouwish.auth.service.UserService;
 import com.asyouwish.auth.util.BusinessException;
@@ -16,8 +18,10 @@ import com.asyouwish.auth.util.ResultCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -84,6 +88,24 @@ public class AuthController {
         return Result.success(userService.getUserInfo(userId));
     }
 
+    @PutMapping("/profile")
+    public Result<UserInfoVO> updateProfile(@AuthenticationPrincipal Long userId,
+                                            @Valid @RequestBody UpdateProfileDTO dto) {
+        if (userId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        return Result.success(userService.updateProfile(userId, dto));
+    }
+
+    @PostMapping(value = "/profile/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<UserInfoVO> uploadAvatar(@AuthenticationPrincipal Long userId,
+                                           @RequestParam("file") MultipartFile file) {
+        if (userId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        return Result.success(userService.uploadAvatar(userId, file));
+    }
+
     @PostMapping("/logout")
     public Result<Void> logout(@RequestHeader(value = "Authorization", required = false) String authorization) {
         if (authorization != null && authorization.startsWith(BEARER_PREFIX)) {
@@ -95,6 +117,16 @@ public class AuthController {
     @PostMapping("/password/reset")
     public Result<Void> resetPassword(@Valid @RequestBody PasswordResetDTO dto) {
         userService.resetPassword(dto);
+        return Result.success();
+    }
+
+    @PostMapping("/password/change")
+    public Result<Void> changePassword(@AuthenticationPrincipal Long userId,
+                                       @Valid @RequestBody ChangePasswordDTO dto) {
+        if (userId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        userService.changePassword(userId, dto);
         return Result.success();
     }
 

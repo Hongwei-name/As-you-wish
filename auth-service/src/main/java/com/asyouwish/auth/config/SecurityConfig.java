@@ -72,7 +72,7 @@ public class SecurityConfig {
                         .requestMatchers("/doc.html", "/webjars/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // 放行登录、注册、发送验证码、密码重置接口
                         .requestMatchers("/auth/sms/send", "/auth/register/**", "/auth/login/**",
-                                "/auth/captcha/**", "/auth/password/**").permitAll()
+                                "/auth/captcha/**", "/auth/password/reset").permitAll()
 
                         // 其他所有请求都需要认证
                         .anyRequest().authenticated()

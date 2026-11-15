@@ -6,6 +6,7 @@ import cloud.tianai.captcha.resource.common.model.dto.Resource;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 
 @Configuration
 public class CaptchaResourceConfiguration {

@@ -4,11 +4,13 @@ import cloud.tianai.captcha.application.ImageCaptchaApplication;
 import cloud.tianai.captcha.common.constant.CaptchaTypeConstant;
 import cloud.tianai.captcha.common.response.ApiResponse;
 import com.asyouwish.auth.dto.CaptchaCheckDTO;
+import com.asyouwish.auth.dto.ChangePasswordDTO;
 import com.asyouwish.auth.dto.PasswordLoginDTO;
 import com.asyouwish.auth.dto.PasswordResetDTO;
 import com.asyouwish.auth.dto.SendSmsDTO;
 import com.asyouwish.auth.dto.SmsLoginDTO;
 import com.asyouwish.auth.dto.SmsRegisterDTO;
+import com.asyouwish.auth.dto.UpdateProfileDTO;
 import com.asyouwish.auth.dto.UserInfoVO;
 import com.asyouwish.auth.entity.AuthUser;
 import com.asyouwish.auth.mapper.AuthUserMapper;
@@ -19,6 +21,7 @@ import com.asyouwish.auth.service.TokenBlacklistService;
 import com.asyouwish.auth.service.UserService;
 import com.asyouwish.auth.util.BusinessException;
 import com.asyouwish.auth.util.JwtUtil;
+import com.asyouwish.auth.util.MinioUtil;
 import com.asyouwish.auth.util.ResultCode;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -31,6 +34,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
@@ -62,6 +66,7 @@ public class UserServiceImpl extends ServiceImpl<AuthUserMapper, AuthUser> imple
     private final SmsCodeService smsCodeService;
     private final AliyunPnvsProperties pnvsProperties;
     private final TokenBlacklistService tokenBlacklistService;
+    private final MinioUtil minioUtil;
 
     @Override
     public AuthUser getUserByPhone(String phone) {
@@ -102,12 +107,12 @@ public class UserServiceImpl extends ServiceImpl<AuthUserMapper, AuthUser> imple
         incrementIpMinuteCounter(scene, clientIp);
         checkDailyLimits(scene, dto.getPhone(), clientIp);
         String phoneLimitKey = phoneLimitKey(scene, dto.getPhone());
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(phoneLimitKey))) {
+        if (redisTemplate.hasKey(phoneLimitKey)) {
             throw new BusinessException("验证码发送过于频繁，请稍后再试");
         }
 
         String captchaKey = SLIDER_CAPTCHA_PREFIX + dto.getCaptchaId();
-        if (!Boolean.TRUE.equals(redisTemplate.delete(captchaKey))) {
+        if (!redisTemplate.delete(captchaKey)) {
             throw new BusinessException("滑块验证已过期，请重新验证");
         }
 
@@ -238,6 +243,81 @@ public class UserServiceImpl extends ServiceImpl<AuthUserMapper, AuthUser> imple
     }
 
     @Override
+    @Transactional
+    public UserInfoVO updateProfile(Long userId, UpdateProfileDTO dto) {
+        AuthUser user = this.getById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        checkUserStatus(user);
+
+        AuthUser update = new AuthUser();
+        update.setId(userId);
+        update.setUpdateTime(LocalDateTime.now());
+        boolean changed = false;
+
+        if (dto.getNickname() != null) {
+            String nickname = dto.getNickname().trim();
+            if (nickname.isEmpty()) {
+                throw new BusinessException("昵称不能为空");
+            }
+            if (!nickname.equals(user.getNickname())) {
+                update.setNickname(nickname);
+                changed = true;
+            }
+        }
+
+        if (dto.getAvatar() != null) {
+            String avatar = dto.getAvatar().trim();
+            if (!avatar.isEmpty() && !avatar.equals(user.getAvatar())) {
+                update.setAvatar(avatar);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            this.updateById(update);
+            user = this.getById(userId);
+        }
+        return new UserInfoVO(user.getId(), user.getPhone(), user.getNickname(), user.getAvatar());
+    }
+
+    @Override
+    @Transactional
+    public UserInfoVO uploadAvatar(Long userId, MultipartFile file) {
+        AuthUser user = this.getById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        checkUserStatus(user);
+        validateAvatar(file);
+
+        String objectName = minioUtil.upload(file, "avatar");
+        String avatarUrl = minioUtil.getObjectUrl(objectName);
+
+        AuthUser update = new AuthUser();
+        update.setId(userId);
+        update.setAvatar(avatarUrl);
+        update.setUpdateTime(LocalDateTime.now());
+        this.updateById(update);
+
+        return new UserInfoVO(user.getId(), user.getPhone(), user.getNickname(), avatarUrl);
+    }
+
+    private void validateAvatar(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("请选择头像图片");
+        }
+        String name = file.getOriginalFilename();
+        String lower = name == null ? "" : name.toLowerCase();
+        boolean allowed = lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+                || lower.endsWith(".png") || lower.endsWith(".webp");
+        if (!allowed) {
+            throw new BusinessException("只允许 jpg / png / webp / jpeg 图片");
+        }
+    }
+
+    @Override
     public void logout(String token) {
         if (!StringUtils.hasText(token)) {
             return;
@@ -263,6 +343,27 @@ public class UserServiceImpl extends ServiceImpl<AuthUserMapper, AuthUser> imple
         user.setUpdateTime(LocalDateTime.now());
         this.updateById(user);
         clearLoginFailures(dto.getPhone());
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordDTO dto) {
+        AuthUser user = this.getById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        checkUserStatus(user);
+        boolean oldMatched = StringUtils.hasText(user.getPassword())
+                && passwordEncoder.matches(dto.getOldPassword(), user.getPassword());
+        if (!oldMatched) {
+            throw new BusinessException(ResultCode.OLD_PASSWORD_ERROR);
+        }
+        if (passwordEncoder.matches(dto.getNewPassword(), user.getPassword())) {
+            throw new BusinessException("新密码不能与原密码相同");
+        }
+        user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
+        user.setUpdateTime(LocalDateTime.now());
+        this.updateById(user);
     }
 
     private void verifySmsCode(SmsScene scene, String phone, String inputCode) {
