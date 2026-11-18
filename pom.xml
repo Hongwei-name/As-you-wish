@@ -120,7 +120,15 @@
                 <artifactId>minio</artifactId>
                 <version>${minio.version}</version>
             </dependency>
+
+
+            <!--gateway网关-->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-starter-gateway</artifactId>
+            </dependency>
         </dependencies>
+
     </dependencyManagement>
 
     <build>

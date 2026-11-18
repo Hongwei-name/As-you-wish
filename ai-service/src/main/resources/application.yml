@@ -3,6 +3,11 @@ spring:
     import: "optional:file:../.env[.properties],optional:file:./.env[.properties]"
   application:
     name: ai-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   ai:
     # 限制 Spring AI 自身重试，避免与 WebClient 传输层重试叠加成重试风暴。
     retry:
@@ -32,6 +37,9 @@ spring:
         group: ${NACOS_GROUP}
 
 assistant:
+  provider: ${ASSISTANT_PROVIDER:openai-compatible}
+  memory:
+    max-messages: 20
   http:
     connect-timeout: 15s
     handshake-timeout: 20s
@@ -41,3 +49,14 @@ assistant:
 
 server:
   port: 2002
+
+jwt:
+  secret: ${JWT_SECRET}
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.zerok.aiservice.entity
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
