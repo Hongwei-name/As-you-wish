@@ -1,6 +1,6 @@
 spring:
   config:
-    import: "optional:file:../.env[.properties],optional:file:./.env[.properties],optional:nacos:order-service.yaml"
+    import: "optional:file:../.env[.properties],optional:file:./.env[.properties]"
   application:
     name: order-service
   datasource:
@@ -16,5 +16,9 @@ spring:
         password: ${NACOS_PASSWORD}
         namespace: ${NACOS_NAMESPACE}
         group: ${NACOS_GROUP}
+
+      config: # 配置中心
+        prefix: order-service
+        file-extension: yaml
 server:
   port: 2001
