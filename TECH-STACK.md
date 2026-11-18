@@ -36,7 +36,7 @@ mvn -B -ntp '-Dmaven.repo.local=.maven-repository' clean verify
 
 现有安装在 `D:\software\nacos`，服务地址 `127.0.0.1:8848`，客户端 gRPC 使用 9848，9849 为服务端通信端口。两个服务都已引入 Nacos discovery starter；原 AI 模块仅有配置但没有依赖的问题已补齐。
 
-通用环境变量：`NACOS_SERVER_ADDR`（默认 `127.0.0.1:8848`）、`NACOS_USERNAME`、`NACOS_PASSWORD`、`NACOS_NAMESPACE`（填写命名空间 ID；默认空表示 public）、`NACOS_GROUP`（默认 `DEFAULT_GROUP`）。本机当前关闭 Nacos 鉴权，无需填账号密码。没有新增 Nacos 配置中心依赖，也无需新增 config import。
+通用环境变量：`NACOS_SERVER_ADDR`（默认 `127.0.0.1:8848`）、`NACOS_USERNAME`、`NACOS_PASSWORD`、`NACOS_NAMESPACE`（填写命名空间 ID；默认空表示 public）、`NACOS_GROUP`（默认 `DEFAULT_GROUP`）。Nacos 鉴权启用时，必须填写 Nacos 中已创建用户的凭据。Order service 目前仅使用 Nacos 服务发现，不从 Nacos Config 拉取配置；不要添加 `nacos:order-service.yaml` 导入，除非同时配置并确有远程配置需求。
 
 本机已有 Nacos 实例时直接复用，避免再次运行启动脚本占用同一个 Derby 数据目录。确认未运行时可执行：
 

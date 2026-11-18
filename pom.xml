@@ -18,6 +18,7 @@
     <modules>
         <module>auth-service</module>
         <module>ai-service</module>
+        <module>order-service</module>
     </modules>
 
     <properties>
