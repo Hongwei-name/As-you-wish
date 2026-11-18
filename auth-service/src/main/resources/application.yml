@@ -1,7 +1,7 @@
 spring:
   config:
     # 支持在后端根目录或模块目录启动；.env 使用 KEY=value 格式，不加引号。
-    import: "optional:file:../.env[.properties],optional:file:./.env[.properties]"
+    import: "optional:file:../.env[.properties],optional:file:./.env[.properties],optional:nacos:auth-service.yaml"
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:test}
   application:
@@ -19,6 +19,14 @@ spring:
         password: ${NACOS_PASSWORD}
         namespace: ${NACOS_NAMESPACE}
         group: ${NACOS_GROUP}
+      config: # 配置中心
+        prefix: auth-service
+        file-extension: yaml
+        server-addr: ${NACOS_SERVER_ADDR}
+        username: ${NACOS_USERNAME}
+        password: ${NACOS_PASSWORD}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
   data:
     redis:
       host: 127.0.0.1

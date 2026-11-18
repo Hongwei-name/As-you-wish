@@ -1,4 +1,9 @@
 package com.zerok.aiservice.repository;
 
-public class ChatHistoryRepository {
+import java.util.List;
+
+public interface ChatHistoryRepository {
+    void save(String type, String chatId);
+
+    List<String> getChatId(String type);
 }

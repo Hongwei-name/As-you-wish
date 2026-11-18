@@ -1,6 +1,6 @@
 spring:
   config:
-    import: "optional:file:../.env[.properties],optional:file:./.env[.properties]"
+    import: "optional:file:../.env[.properties],optional:file:./.env[.properties],optional:nacos:ai-service.yaml"
   application:
     name: ai-service
   datasource:
@@ -35,6 +35,14 @@ spring:
         password: ${NACOS_PASSWORD}
         namespace: ${NACOS_NAMESPACE}
         group: ${NACOS_GROUP}
+      config: # 配置中心
+        prefix: ai-service
+        file-extension: yaml
+        server-addr: ${NACOS_SERVER_ADDR}
+        username: ${NACOS_USERNAME}
+        password: ${NACOS_PASSWORD}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
 
 assistant:
   provider: ${ASSISTANT_PROVIDER:openai-compatible}

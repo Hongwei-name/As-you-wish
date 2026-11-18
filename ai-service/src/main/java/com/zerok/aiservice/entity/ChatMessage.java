@@ -1,6 +1,7 @@
 package com.zerok.aiservice.entity;
 
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 @Data

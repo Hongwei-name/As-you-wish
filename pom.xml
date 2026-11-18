@@ -19,6 +19,8 @@
         <module>auth-service</module>
         <module>ai-service</module>
         <module>order-service</module>
+        <module>product-service</module>
+        <module>stock-service</module>
     </modules>
 
     <properties>
