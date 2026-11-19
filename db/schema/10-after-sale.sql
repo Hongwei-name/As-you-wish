@@ -1,0 +1,46 @@
+-- 售后申请与退款单：支持按订单商品分项申请售后。
+CREATE TABLE IF NOT EXISTS ord_after_sale (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '售后申请主键ID',
+  after_sale_no VARCHAR(64) NOT NULL COMMENT '售后业务编号',
+  order_id BIGINT NOT NULL COMMENT '关联现有ord_order.id',
+  order_item_id BIGINT UNSIGNED NOT NULL COMMENT '关联ord_item.id',
+  order_no VARCHAR(64) NOT NULL COMMENT '业务订单编号',
+  user_id BIGINT NOT NULL COMMENT '申请用户ID，逻辑引用auth_user.id',
+  type TINYINT UNSIGNED NOT NULL COMMENT '售后类型：1仅退款，2退货退款，3换货',
+  reason_code VARCHAR(32) NULL COMMENT '售后原因标准编码',
+  reason_description VARCHAR(500) NULL COMMENT '用户填写的售后原因',
+  quantity DECIMAL(12,3) NOT NULL COMMENT '申请售后数量',
+  refund_amount DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '申请退款金额，人民币元',
+  status TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '状态：0待审核，1待寄回，2处理中，3已完成，4拒绝，5取消',
+  reject_reason VARCHAR(500) NULL COMMENT '审核拒绝原因',
+  applied_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '申请时间',
+  completed_at DATETIME(3) NULL COMMENT '售后完成时间',
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ord_after_sale_no (after_sale_no),
+  KEY idx_ord_after_sale_order (order_id, applied_at),
+  KEY idx_ord_after_sale_user (user_id, applied_at),
+  KEY idx_ord_after_sale_status (status, applied_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='订单售后申请表';
+
+CREATE TABLE IF NOT EXISTS ord_refund (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '退款单主键ID',
+  refund_no VARCHAR(64) NOT NULL COMMENT '平台退款单号',
+  after_sale_id BIGINT UNSIGNED NULL COMMENT '关联售后申请ID；整单退款可空',
+  order_id BIGINT NOT NULL COMMENT '关联现有ord_order.id',
+  order_no VARCHAR(64) NOT NULL COMMENT '业务订单编号',
+  payment_id BIGINT UNSIGNED NULL COMMENT '原支付单ID',
+  channel_refund_no VARCHAR(128) NULL COMMENT '支付渠道退款流水号',
+  amount DECIMAL(12,2) NOT NULL COMMENT '退款金额，人民币元',
+  status TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '状态：0待处理，1处理中，2成功，3失败',
+  idempotency_key VARCHAR(128) NOT NULL COMMENT '退款请求幂等键',
+  reason VARCHAR(500) NULL COMMENT '退款原因说明',
+  refunded_at DATETIME(3) NULL COMMENT '退款成功时间',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '退款单创建时间',
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '退款单更新时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ord_refund_no (refund_no),
+  UNIQUE KEY uk_ord_refund_idempotency (idempotency_key),
+  KEY idx_ord_refund_order (order_id, created_at),
+  KEY idx_ord_refund_status (status, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='订单退款单表';
