@@ -28,3 +28,9 @@ spring:
 
 server:
   port: 2001
+
+feign:
+  client:
+    config:
+      default:
+        loggerLevel: FULL
