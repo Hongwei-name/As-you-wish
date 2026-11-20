@@ -28,3 +28,15 @@ spring:
 
 server:
   port: 2004
+
+service-auth:
+  internal-token: ${INTERNAL_SERVICE_TOKEN:}
+
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:false}
+
+knife4j:
+  enable: ${API_DOCS_ENABLED:false}

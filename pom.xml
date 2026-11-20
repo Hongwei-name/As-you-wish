@@ -16,6 +16,7 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <modules>
+        <module>service-contract</module>
         <module>auth-service</module>
         <module>ai-service</module>
         <module>order-service</module>

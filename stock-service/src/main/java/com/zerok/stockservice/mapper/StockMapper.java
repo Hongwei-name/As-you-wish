@@ -10,6 +10,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * SQL 边界，负责库存锁定、条件更新、预占和审计流水持久化。
+ */
 @Mapper
 public interface StockMapper {
     @Select("SELECT s.id,s.sku_id AS skuId,s.warehouse_id AS warehouseId,s.total_quantity AS totalQuantity," +
@@ -45,6 +48,11 @@ public interface StockMapper {
 
     @Select("SELECT id,reservation_no AS reservationNo,order_id AS orderId,order_no AS orderNo,sku_id AS skuId,warehouse_id AS warehouseId,quantity,status,expire_at AS expireAt FROM wms_reservation WHERE order_no=#{orderNo} AND status=0 ORDER BY sku_id FOR UPDATE")
     List<ReservationRow> findActiveReservations(@Param("orderNo") String orderNo);
+
+    @Select("SELECT id,reservation_no AS reservationNo,order_id AS orderId,order_no AS orderNo,sku_id AS skuId," +
+            "warehouse_id AS warehouseId,quantity,status,expire_at AS expireAt FROM wms_reservation " +
+            "WHERE order_no=#{orderNo} ORDER BY sku_id,warehouse_id FOR UPDATE")
+    List<ReservationRow> findReservations(@Param("orderNo") String orderNo);
 
     @Update("UPDATE wms_reservation SET status=#{status} WHERE id=#{id} AND status=0")
     int updateReservationStatus(@Param("id") long id, @Param("status") int status);

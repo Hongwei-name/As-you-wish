@@ -3,11 +3,12 @@ package com.zerok.stockservice;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
-import org.springframework.cloud.openfeign.EnableFeignClients;
 
+/**
+ * Stock 服务入口，负责启动库存域 API 和 Nacos 服务注册。
+ */
 @SpringBootApplication
 @EnableDiscoveryClient
-@EnableFeignClients
 public class StockServiceApplication {
 
     public static void main(String[] args) {

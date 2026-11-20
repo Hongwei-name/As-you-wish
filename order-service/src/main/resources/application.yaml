@@ -1,6 +1,6 @@
 spring:
   config:
-    import: "optional:file:../.env[.properties],optional:file:./.env[.properties],optional:nacos:order-service.yaml"
+    import: "optional:file:../.env[.properties],optional:file:./.env[.properties]"
   application:
     name: order-service
   datasource:
@@ -16,21 +16,28 @@ spring:
         password: ${NACOS_PASSWORD}
         namespace: ${NACOS_NAMESPACE}
         group: ${NACOS_GROUP}
-
-      config: # 配置中心
-        prefix: order-service
-        file-extension: yaml
-        server-addr: ${NACOS_SERVER_ADDR}
-        username: ${NACOS_USERNAME}
-        password: ${NACOS_PASSWORD}
-        namespace: ${NACOS_NAMESPACE:}
-        group: ${NACOS_GROUP:DEFAULT_GROUP}
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 1000
+            readTimeout: 3000
+            loggerLevel: none
 
 server:
   port: 2001
 
-feign:
-  client:
-    config:
-      default:
-        loggerLevel: FULL
+jwt:
+  secret: ${JWT_SECRET}
+
+service-auth:
+  internal-token: ${INTERNAL_SERVICE_TOKEN:}
+
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:false}
+
+knife4j:
+  enable: ${API_DOCS_ENABLED:false}

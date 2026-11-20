@@ -1,6 +1,6 @@
 # Java 17 技术栈与本机运行
 
-两个服务统一继承根 Maven 父项目，不再独立声明 Spring Boot / Cloud 版本。
+五个业务服务和共享契约模块统一继承根 Maven 父项目，不再独立声明 Spring Boot / Cloud 版本。
 
 | 组件 | 版本 |
 | --- | --- |
@@ -30,7 +30,7 @@ mvn clean verify
 mvn -B -ntp '-Dmaven.repo.local=.maven-repository' clean verify
 ```
 
-未修改系统 JAVA_HOME。两个服务生成 `*-1.0-SNAPSHOT.jar`，AI 模块原 `0.0.1-SNAPSHOT` 部署脚本需同步调整。
+未修改系统 JAVA_HOME。每个业务服务分别生成可执行 JAR；共享契约模块只生成普通依赖 JAR。
 
 ## Nacos
 
@@ -44,11 +44,27 @@ mvn -B -ntp '-Dmaven.repo.local=.maven-repository' clean verify
 & 'D:\software\nacos\bin\startup.cmd' -m standalone
 ```
 
+## Product、Order 与 Stock
+
+首期调用方向为 order-service -> product-service 和 order-service -> stock-service，Feign 通过 Nacos 服务名发现实例。Product/Stock 内部 API 校验 X-Internal-Service-Token；Order 用 Auth 签发的 JWT 本地识别用户，不把用户 JWT 当作服务凭证透传。
+
+启动 Product、Order、Stock 前，在后端根目录 .env 配置 INTERNAL_SERVICE_TOKEN。三项服务使用相同的专用随机令牌，至少 32 字节，并与 JWT_SECRET 分开；.env.example 已列出该键。令牌缺失时内部 API 失败关闭，Feign 请求也不会发送。
+
+订单接口为 POST /orders、GET /orders/{orderNo}、POST /orders/{orderNo}/cancel；创建请求需带 Idempotency-Key。Order 从 Product 读取售价快照，由 Stock 预占库存；取消先释放库存再关闭订单。Order 目前本地验签而不查询 Auth 的 Redis 黑名单，因此已登出 JWT 在过期前仍可能被接受。
+
 ## 根目录环境文件
 
 真实配置统一填写在后端根目录 `.env`，该文件被 Git 忽略；`.env.example` 是可提交模板。首次使用复制模板并填写真实值。使用 `KEY=value`，不加引号，不加 `export`。两个模块通过 Spring Boot 原生 `spring.config.import` 将 `.env` 按 properties 加载，支持从后端根目录或服务模块目录启动，无需启用 local profile；系统环境变量仍可覆盖文件值。JWT 密钥至少 32 个 UTF-8 字节，过期时间键名为 `JWT_EXPIRE_MILLIS`。
 
 下面示例中的环境变量也可直接写进根目录 `.env`，无需每次在终端设置。
+
+## Product、Order 与 Stock
+
+首期调用方向为 order-service -> product-service 和 order-service -> stock-service，Feign 使用 Nacos 服务名发现实例。Product/Stock 内部 API 校验 X-Internal-Service-Token；Order 使用 Auth 签发的 JWT 在本地验证用户身份，不把用户 JWT 当作服务凭证透传。
+
+启动 Product、Order、Stock 前，需在后端根目录 .env 配置 INTERNAL_SERVICE_TOKEN。三项服务使用同一个至少 32 个随机字节的专用值，并与 JWT_SECRET 分开；.env.example 已列出该键。未配置时内部接口失败关闭，Feign 请求也不会发送。
+
+Order 创建接口要求 Idempotency-Key 请求头。下单价格来自 Product 的当前可售 SKU 快照，库存由 Stock 预占；取消先释放库存再关闭订单。Order 本地验签暂不查询 Auth 的 Redis Token 黑名单，因此登出的 JWT 在过期前仍可能访问 Order。
 
 ## AI 服务
 
